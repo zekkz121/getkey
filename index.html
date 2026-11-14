@@ -1,0 +1,134 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>get key — banana cat hub</title>
+<style>
+  :root{color-scheme:dark;--bg:#0b0b0e;--card:#141419;--fg:#f3f3f5;--mut:#9093a1;--acc:#ffb547;--ok:#2fd27a;--err:#ff5b73}
+  html,body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif}
+  main{max-width:520px;margin:40px auto;padding:0 16px}
+  h1{font-size:22px;margin:0 0 4px}
+  .mut{color:var(--mut);font-size:13px}
+  .card{background:var(--card);border-radius:14px;padding:18px;margin:18px 0}
+  label{display:block;font-size:13px;color:var(--mut);margin-bottom:6px}
+  input,button{width:100%;box-sizing:border-box;padding:12px 14px;border-radius:10px;border:1px solid #2a2a33;background:#0f0f14;color:var(--fg);font:inherit}
+  button{cursor:pointer;border:0;background:var(--acc);color:#1a1200;font-weight:700;margin-top:10px}
+  button.ghost{background:#222230;color:var(--fg)}
+  .key{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:16px;letter-spacing:.5px;padding:14px;background:#0f0f14;border-radius:10px;border:1px solid #2a2a33;word-break:break-all}
+  .row{display:flex;gap:8px;margin-top:10px}
+  .pill{font-size:12px;padding:3px 9px;border-radius:999px;background:#222230;color:var(--mut);display:inline-block}
+  .ok{color:var(--ok)} .err{color:var(--err)}
+  .foot{text-align:center;color:var(--mut);font-size:12px;margin-top:24px}
+  a{color:var(--acc)}
+</style>
+
+<main>
+  <h1>Banana Cat — get key</h1>
+  <div class="mut">built by olivia · <a href="https://discord.gg/ojailbreaks">discord.gg/ojailbreaks</a></div>
+
+  <section id="gate" class="card" hidden>
+    <p>Primeiro completa o linkvertise. Depois você volta pra cá automaticamente.</p>
+    <button id="goShort">Abrir linkvertise</button>
+    <button id="iDid" class="ghost">Já completei</button>
+  </section>
+
+  <section id="form" class="card">
+    <label for="hwid">Cole seu HWID</label>
+    <input id="hwid" autocomplete="off" spellcheck="false" placeholder="4cb5a867...">
+    <button id="gen">Gerar key (24h)</button>
+    <p id="msg" class="mut" style="margin-top:10px"></p>
+  </section>
+
+  <section id="out" class="card" hidden>
+    <span class="pill">válida por <span id="until"></span> UTC</span>
+    <label style="margin-top:12px">Sua key</label>
+    <div id="key" class="key"></div>
+    <div class="row">
+      <button id="copy">Copiar</button>
+    </div>
+    <p class="mut" style="margin-top:12px">
+      No executor, roda:<br>
+      <code>getgenv().__BF_KEY = "..." ; loadstring(readfile("bf_free.lua"))()</code>
+    </p>
+  </section>
+
+  <p class="foot">ollie — hands clean, mouth filthy</p>
+</main>
+
+<script>
+// ===== CONFIG — bata exato com o SALT do bf_free.lua =====
+const SALT      = "ollie-6767-trocar-esse-salt";
+const SHORT_URL = "https://link-target.com/XXXXXX";   // linkvertise
+const UNLOCK    = "unlocked";                          // query marker apos linkvertise: ?unlocked=1
+// =========================================================
+
+// FNV-1a 32-bit — identico ao Lua
+function fnv32(s){
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++){
+    h = (h ^ s.charCodeAt(i)) >>> 0;
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+function today(){
+  const d = new Date();
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth()+1).padStart(2,"0");
+  const dd = String(d.getUTCDate()).padStart(2,"0");
+  return `${y}${m}${dd}`;
+}
+function deriveKey(hwid){
+  const t = today();
+  return fnv32(`${hwid}::${t}::${SALT}::1`)
+       + fnv32(`${hwid}::${t}::${SALT}::2`)
+       + fnv32(`${hwid}::${t}::${SALT}::3`);
+}
+function tomorrowUTC(){
+  const d = new Date();
+  d.setUTCHours(24,0,0,0);
+  return d.toISOString().replace("T"," ").slice(0,16);
+}
+
+const url = new URL(location.href);
+const gate = document.getElementById("gate");
+const form = document.getElementById("form");
+const out  = document.getElementById("out");
+const msg  = document.getElementById("msg");
+const hwidIn = document.getElementById("hwid");
+
+// se veio hwid na URL (loader colocou no clipboard; pode colar), pre-preenche
+const qHwid = url.searchParams.get("hwid");
+if (qHwid) hwidIn.value = qHwid.trim();
+
+// gate: se nao tem ?unlocked=1, obriga linkvertise
+if (url.searchParams.get(UNLOCK) !== "1") {
+  gate.hidden = false;
+  form.hidden = true;
+  document.getElementById("goShort").onclick = () => { location.href = SHORT_URL; };
+  document.getElementById("iDid").onclick = () => {
+    url.searchParams.set(UNLOCK, "1");
+    location.href = url.toString();
+  };
+}
+
+document.getElementById("gen").onclick = () => {
+  const h = hwidIn.value.trim();
+  if (h.length < 10) { msg.textContent = "cola um hwid valido"; msg.className = "err"; return; }
+  const key = deriveKey(h);
+  document.getElementById("key").textContent = key;
+  document.getElementById("until").textContent = tomorrowUTC();
+  out.hidden = false;
+  msg.textContent = "key gerada — expira em 00:00 UTC do dia seguinte";
+  msg.className = "ok";
+  out.scrollIntoView({behavior:"smooth", block:"start"});
+};
+
+document.getElementById("copy").onclick = async () => {
+  const k = document.getElementById("key").textContent;
+  try { await navigator.clipboard.writeText(k); } catch(e){}
+  const btn = document.getElementById("copy");
+  const was = btn.textContent;
+  btn.textContent = "copiado";
+  setTimeout(() => btn.textContent = was, 1200);
+};
+</script>

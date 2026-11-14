@@ -13,6 +13,7 @@
   input,button{width:100%;box-sizing:border-box;padding:14px 16px;border-radius:10px;border:1px solid #2a2a33;background:#0f0f14;color:var(--fg);font:inherit}
   input{text-align:center;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:20px;letter-spacing:4px;text-transform:lowercase}
   button{cursor:pointer;border:0;background:var(--acc);color:#1a1200;font-weight:700;margin-top:10px}
+  button:disabled{opacity:.5;cursor:not-allowed}
   button.ghost{background:#222230;color:var(--fg)}
   .key{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:16px;letter-spacing:.5px;padding:14px;background:#0f0f14;border-radius:10px;border:1px solid #2a2a33;word-break:break-all;text-align:center}
   .pill{font-size:12px;padding:3px 9px;border-radius:999px;background:#222230;color:var(--mut);display:inline-block}
@@ -26,12 +27,11 @@
   <h1>Banana Cat — get key</h1>
 
   <section id="gate" class="card" hidden>
-    <p>Primeiro completa o linkvertise. Depois você volta pra cá automaticamente.</p>
+    <p>Precisa completar o linkvertise pra gerar key.</p>
     <button id="goShort">Abrir linkvertise</button>
-    <button id="iDid" class="ghost">Já completei</button>
   </section>
 
-  <section id="form" class="card">
+  <section id="form" class="card" hidden>
     <label for="code">Cole seu CÓDIGO (8 caracteres do kick)</label>
     <input id="code" autocomplete="off" spellcheck="false" placeholder="a1b2c3d4" maxlength="8">
     <button id="gen">Gerar key (24h)</button>
@@ -53,68 +53,67 @@
 </main>
 
 <script>
-const SALT      = "zkz-ollie-fridge-6767-banana-cheia-$Lk9m!PxVn@2026";
-const SHORT_URL = "https://link-hub.net/8789843/FRSCqUrAq5LC";
-const UNLOCK    = "unlocked";
-
-function fnv32(s){
-  let h = 2166136261 >>> 0;
-  for (let i = 0; i < s.length; i++){
-    h = (h ^ s.charCodeAt(i)) >>> 0;
-    h = Math.imul(h, 16777619) >>> 0;
-  }
-  return h.toString(16).padStart(8, "0");
-}
-function today(){
-  const d = new Date();
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth()+1).padStart(2,"0");
-  const dd = String(d.getUTCDate()).padStart(2,"0");
-  return `${y}${m}${dd}`;
-}
-function deriveKey(code){
-  const t = today();
-  return fnv32(`${code}::${t}::${SALT}::1`)
-       + fnv32(`${code}::${t}::${SALT}::2`)
-       + fnv32(`${code}::${t}::${SALT}::3`);
-}
-function tomorrowUTC(){
-  const d = new Date();
-  d.setUTCHours(24,0,0,0);
-  return d.toISOString().replace("T"," ").slice(0,16);
-}
+// ===== CONFIG =====
+const SHORT_URL  = "https://link-hub.net/8789843/FRSCqUrAq5LC";
+const WORKER_URL = "https://banana-worker.zekkz12112.workers.dev";
+// ==================
 
 const url    = new URL(location.href);
+const token  = url.searchParams.get("t");
 const gate   = document.getElementById("gate");
 const form   = document.getElementById("form");
 const out    = document.getElementById("out");
 const msg    = document.getElementById("msg");
 const codeIn = document.getElementById("code");
 
-if (url.searchParams.get(UNLOCK) !== "1") {
+if (!token) {
   gate.hidden = false;
-  form.hidden = true;
   document.getElementById("goShort").onclick = () => { location.href = SHORT_URL; };
-  document.getElementById("iDid").onclick = () => {
-    url.searchParams.set(UNLOCK, "1");
-    location.href = url.toString();
-  };
+} else {
+  form.hidden = false;
 }
 
-document.getElementById("gen").onclick = () => {
+function tomorrowUTC(){
+  const d = new Date();
+  d.setUTCHours(24,0,0,0);
+  return d.toISOString().replace("T"," ").slice(0,16);
+}
+
+document.getElementById("gen").onclick = async () => {
   const c = codeIn.value.trim().toLowerCase();
   if (!/^[0-9a-f]{8}$/.test(c)) {
-    msg.textContent = "código inválido — tem que ser 8 caracteres hex (a-f, 0-9)";
+    msg.textContent = "código inválido — 8 caracteres hex (a-f, 0-9)";
     msg.className = "err";
     return;
   }
-  const key = deriveKey(c);
-  document.getElementById("key").textContent = key;
-  document.getElementById("until").textContent = tomorrowUTC();
-  out.hidden = false;
-  msg.textContent = "key gerada — vale 24h só pra esse código";
-  msg.className = "ok";
-  out.scrollIntoView({behavior:"smooth", block:"start"});
+  const btn = document.getElementById("gen");
+  btn.disabled = true; btn.textContent = "Gerando...";
+  msg.textContent = ""; msg.className = "mut";
+
+  try {
+    const r = await fetch(WORKER_URL + "/key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, code: c }),
+    });
+    const data = await r.json();
+    if (!r.ok || !data.ok) {
+      msg.textContent = data.error || "falhou";
+      msg.className = "err";
+    } else {
+      document.getElementById("key").textContent = data.key;
+      document.getElementById("until").textContent = data.expires_at || tomorrowUTC();
+      out.hidden = false;
+      msg.textContent = "key gerada — vale 24h só pra esse código";
+      msg.className = "ok";
+      out.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  } catch (e) {
+    msg.textContent = "erro de rede: " + (e.message || e);
+    msg.className = "err";
+  } finally {
+    btn.disabled = false; btn.textContent = "Gerar key (24h)";
+  }
 };
 
 document.getElementById("copy").onclick = async () => {

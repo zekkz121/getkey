@@ -10,10 +10,11 @@
   .mut{color:var(--mut);font-size:13px}
   .card{background:var(--card);border-radius:14px;padding:18px;margin:18px 0}
   label{display:block;font-size:13px;color:var(--mut);margin-bottom:6px}
-  input,button{width:100%;box-sizing:border-box;padding:12px 14px;border-radius:10px;border:1px solid #2a2a33;background:#0f0f14;color:var(--fg);font:inherit}
+  input,button{width:100%;box-sizing:border-box;padding:14px 16px;border-radius:10px;border:1px solid #2a2a33;background:#0f0f14;color:var(--fg);font:inherit}
+  input{text-align:center;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:20px;letter-spacing:4px;text-transform:lowercase}
   button{cursor:pointer;border:0;background:var(--acc);color:#1a1200;font-weight:700;margin-top:10px}
   button.ghost{background:#222230;color:var(--fg)}
-  .key{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:16px;letter-spacing:.5px;padding:14px;background:#0f0f14;border-radius:10px;border:1px solid #2a2a33;word-break:break-all}
+  .key{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:16px;letter-spacing:.5px;padding:14px;background:#0f0f14;border-radius:10px;border:1px solid #2a2a33;word-break:break-all;text-align:center}
   .pill{font-size:12px;padding:3px 9px;border-radius:999px;background:#222230;color:var(--mut);display:inline-block}
   .ok{color:var(--ok)} .err{color:var(--err)}
   .foot{text-align:center;color:var(--mut);font-size:12px;margin-top:24px}
@@ -31,8 +32,8 @@
   </section>
 
   <section id="form" class="card">
-    <label for="hwid">Cole seu HWID (já está no seu clipboard: Ctrl+V)</label>
-    <input id="hwid" autocomplete="off" spellcheck="false" placeholder="cola aqui...">
+    <label for="code">Cole seu CÓDIGO (8 caracteres do kick)</label>
+    <input id="code" autocomplete="off" spellcheck="false" placeholder="a1b2c3d4" maxlength="8">
     <button id="gen">Gerar key (24h)</button>
     <p id="msg" class="mut" style="margin-top:10px"></p>
   </section>
@@ -43,11 +44,12 @@
     <div id="key" class="key"></div>
     <button id="copy">Copiar</button>
     <p class="mut" style="margin-top:12px">
-      No executor, roda:<br>
-      <code>getgenv().__BF_KEY = "..." ; loadstring(readfile("bf_free.lua"))()</code>
+      No executor:<br>
+      <code>getgenv().__BF_KEY = "..." ; loadstring(game:HttpGet("https://raw.githubusercontent.com/zekkz121/banana/main/bf_free.lua"))()</code>
     </p>
   </section>
 
+  <p class="foot">built by olivia · <a href="https://discord.gg/ojailbreaks">discord.gg/ojailbreaks</a></p>
 </main>
 
 <script>
@@ -70,11 +72,11 @@ function today(){
   const dd = String(d.getUTCDate()).padStart(2,"0");
   return `${y}${m}${dd}`;
 }
-function deriveKey(hwid){
+function deriveKey(code){
   const t = today();
-  return fnv32(`${hwid}::${t}::${SALT}::1`)
-       + fnv32(`${hwid}::${t}::${SALT}::2`)
-       + fnv32(`${hwid}::${t}::${SALT}::3`);
+  return fnv32(`${code}::${t}::${SALT}::1`)
+       + fnv32(`${code}::${t}::${SALT}::2`)
+       + fnv32(`${code}::${t}::${SALT}::3`);
 }
 function tomorrowUTC(){
   const d = new Date();
@@ -87,10 +89,7 @@ const gate   = document.getElementById("gate");
 const form   = document.getElementById("form");
 const out    = document.getElementById("out");
 const msg    = document.getElementById("msg");
-const hwidIn = document.getElementById("hwid");
-
-const qHwid = url.searchParams.get("hwid");
-if (qHwid) hwidIn.value = qHwid.trim();
+const codeIn = document.getElementById("code");
 
 if (url.searchParams.get(UNLOCK) !== "1") {
   gate.hidden = false;
@@ -103,13 +102,17 @@ if (url.searchParams.get(UNLOCK) !== "1") {
 }
 
 document.getElementById("gen").onclick = () => {
-  const h = hwidIn.value.trim();
-  if (h.length < 10) { msg.textContent = "cola um HWID válido (do console do executor)"; msg.className = "err"; return; }
-  const key = deriveKey(h);
+  const c = codeIn.value.trim().toLowerCase();
+  if (!/^[0-9a-f]{8}$/.test(c)) {
+    msg.textContent = "código inválido — tem que ser 8 caracteres hex (a-f, 0-9)";
+    msg.className = "err";
+    return;
+  }
+  const key = deriveKey(c);
   document.getElementById("key").textContent = key;
   document.getElementById("until").textContent = tomorrowUTC();
   out.hidden = false;
-  msg.textContent = "key gerada — vale 24h só pra esse HWID";
+  msg.textContent = "key gerada — vale 24h só pra esse código";
   msg.className = "ok";
   out.scrollIntoView({behavior:"smooth", block:"start"});
 };
